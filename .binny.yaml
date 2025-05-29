@@ -47,14 +47,6 @@ tools:
     with:
       repo: sigstore/cosign
 
-  # used in integration tests to verify JSON schemas
-  - name: yajsv
-    version:
-      want: v1.4.1
-    method: github-release
-    with:
-      repo: neilpa/yajsv
-
   # used to release all artifacts
   - name: goreleaser
     version:
@@ -98,7 +90,7 @@ tools:
   # used for triggering a release
   - name: gh
     version:
-      want: v2.72.0
+      want: v2.73.0
     method: github-release
     with:
       repo: cli/cli
@@ -106,7 +98,7 @@ tools:
   # used for integration tests
   - name: skopeo
     version:
-      want: v1.18.0
+      want: v1.19.0
     method: go-install
     with:
       module: github.com/containers/skopeo
