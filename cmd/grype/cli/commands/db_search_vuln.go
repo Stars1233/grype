@@ -18,9 +18,7 @@ import (
 	v6 "github.com/anchore/grype/grype/db/v6"
 	"github.com/anchore/grype/grype/db/v6/distribution"
 	"github.com/anchore/grype/grype/db/v6/installation"
-	"github.com/anchore/grype/grype/vulnerability"
 	"github.com/anchore/grype/internal/bus"
-	"github.com/anchore/grype/internal/cvss"
 )
 
 type dbSearchVulnerabilityOptions struct {
@@ -94,12 +92,11 @@ func runDBSearchVulnerabilities(opts dbSearchVulnerabilityOptions) error {
 		return err
 	}
 
-	if len(rows) != 0 {
-		sb := &strings.Builder{}
-		err = presentDBSearchVulnerabilities(opts.Format.Output, rows, sb)
-		bus.Report(sb.String())
-	} else {
-		bus.Notify("No results found")
+	sb := &strings.Builder{}
+	err = presentDBSearchVulnerabilities(opts.Format.Output, rows, sb)
+	rep := sb.String()
+	if rep != "" {
+		bus.Report(rep)
 	}
 
 	return err
@@ -132,12 +129,13 @@ func validateProvidersFilter(reader v6.Reader, providers []string) error {
 }
 
 func presentDBSearchVulnerabilities(outputFormat string, structuredRows []dbsearch.Vulnerability, output io.Writer) error {
-	if len(structuredRows) == 0 {
-		return nil
-	}
-
 	switch outputFormat {
 	case tableOutputFormat:
+		if len(structuredRows) == 0 {
+			bus.Notify("No results found")
+			return nil
+		}
+
 		rows := renderDBSearchVulnerabilitiesTableRows(structuredRows)
 
 		table := newTable(output)
@@ -146,6 +144,10 @@ func presentDBSearchVulnerabilities(outputFormat string, structuredRows []dbsear
 		table.AppendBulk(rows)
 		table.Render()
 	case jsonOutputFormat:
+		if structuredRows == nil {
+			// always allocate the top level collection
+			structuredRows = []dbsearch.Vulnerability{}
+		}
 		enc := json.NewEncoder(output)
 		enc.SetEscapeHTML(false)
 		enc.SetIndent("", " ")
@@ -173,7 +175,7 @@ func renderDBSearchVulnerabilitiesTableRows(structuredRows []dbsearch.Vulnerabil
 			Vuln:                    rr.ID,
 			ProviderWithoutVersions: rr.Provider,
 			PublishedDate:           getDate(rr.PublishedDate),
-			Severity:                getSeverity(rr.Severities),
+			Severity:                rr.Severity,
 			Reference:               getPrimaryReference(rr.References),
 		}
 		versionsByRow[r] = append(versionsByRow[r], getOSVersions(rr.OperatingSystems)...)
@@ -223,19 +225,4 @@ func getDate(t *time.Time) string {
 		return t.Format("2006-01-02")
 	}
 	return ""
-}
-
-func getSeverity(sevs []v6.Severity) string {
-	if len(sevs) == 0 {
-		return vulnerability.UnknownSeverity.String()
-	}
-	// get the first severity value (which is ranked highest)
-	switch v := sevs[0].Value.(type) {
-	case string:
-		return v
-	case dbsearch.CVSSSeverity:
-		return cvss.SeverityFromBaseScore(v.Metrics.BaseScore).String()
-	}
-
-	return fmt.Sprintf("%v", sevs[0].Value)
 }
