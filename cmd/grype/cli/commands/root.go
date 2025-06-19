@@ -12,6 +12,7 @@ import (
 	"github.com/anchore/clio"
 	"github.com/anchore/grype/cmd/grype/cli/options"
 	"github.com/anchore/grype/grype"
+	"github.com/anchore/grype/grype/distro"
 	"github.com/anchore/grype/grype/event"
 	"github.com/anchore/grype/grype/event/parsers"
 	"github.com/anchore/grype/grype/grypeerr"
@@ -35,7 +36,6 @@ import (
 	"github.com/anchore/grype/internal/stringutil"
 	"github.com/anchore/syft/syft"
 	"github.com/anchore/syft/syft/cataloging"
-	"github.com/anchore/syft/syft/linux"
 	syftPkg "github.com/anchore/syft/syft/pkg"
 	"github.com/anchore/syft/syft/sbom"
 )
@@ -65,6 +65,7 @@ You can also explicitly specify the scheme to use:
     {{.appName}} registry:yourrepo/yourimage:tag        pull image directly from a registry (no container runtime required)
     {{.appName}} purl:path/to/purl/file                 read a newline separated file of package URLs from a path on disk
     {{.appName}} PURL                                   read a single package PURL directly (e.g. pkg:apk/openssl@3.2.1?distro=alpine-3.20.3)
+    {{.appName}} CPE                                    read a single CPE directly (e.g. cpe:2.3:a:openssl:openssl:3.0.14:*:*:*:*:*)
 
 You can also pipe in Syft JSON directly:
 	syft yourimage:tag -o json | {{.appName}}
@@ -172,7 +173,6 @@ func runGrype(app clio.Application, opts *options.Grype, userInput string) (errs
 			return nil
 		},
 	)
-
 	if err != nil {
 		return err
 	}
@@ -261,15 +261,10 @@ func applyDistroHint(pkgs []pkg.Package, context *pkg.Context, opts *options.Gry
 		if len(split) > 1 {
 			v = split[1]
 		}
-		context.Distro = &linux.Release{
-			PrettyName: d,
-			Name:       d,
-			ID:         d,
-			IDLike: []string{
-				d,
-			},
-			Version:   v,
-			VersionID: v,
+		var err error
+		context.Distro, err = distro.NewFromNameVersion(d, v)
+		if err != nil {
+			log.WithFields("distro", opts.Distro, "error", err).Warn("unable to parse distro")
 		}
 	}
 
@@ -406,7 +401,9 @@ func validateRootArgs(cmd *cobra.Command, args []string) error {
 }
 
 func applyVexRules(opts *options.Grype) error {
-	if len(opts.Ignore) == 0 && len(opts.VexDocuments) > 0 {
+	// If any vex documents are provided, assume the user intends to ignore vulnerabilities that those
+	// vex documents list as "fixed" or "not_affected".
+	if len(opts.VexDocuments) > 0 {
 		opts.Ignore = append(opts.Ignore, ignoreVEXFixedNotAffected...)
 	}
 

@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/anchore/grype/grype/match"
@@ -12,9 +11,9 @@ import (
 	"github.com/anchore/grype/internal/log"
 )
 
-func MatchPackageByLanguage(store vulnerability.Provider, p pkg.Package, matcherType match.MatcherType) ([]match.Match, []match.IgnoredMatch, error) {
+func MatchPackageByLanguage(store vulnerability.Provider, p pkg.Package, matcherType match.MatcherType) ([]match.Match, []match.IgnoreFilter, error) {
 	var matches []match.Match
-	var ignored []match.IgnoredMatch
+	var ignored []match.IgnoreFilter
 
 	for _, name := range store.PackageSearchNames(p) {
 		nameMatches, nameIgnores, err := MatchPackageByEcosystemPackageName(store, p, name, matcherType)
@@ -28,19 +27,10 @@ func MatchPackageByLanguage(store vulnerability.Provider, p pkg.Package, matcher
 	return matches, ignored, nil
 }
 
-func MatchPackageByEcosystemPackageName(provider vulnerability.Provider, p pkg.Package, packageName string, matcherType match.MatcherType) ([]match.Match, []match.IgnoredMatch, error) {
+func MatchPackageByEcosystemPackageName(provider vulnerability.Provider, p pkg.Package, packageName string, matcherType match.MatcherType) ([]match.Match, []match.IgnoreFilter, error) {
 	if isUnknownVersion(p.Version) {
 		log.WithFields("package", p.Name).Trace("skipping package with unknown version")
 		return nil, nil, nil
-	}
-
-	verObj, err := version.NewVersionFromPkg(p)
-	if err != nil {
-		if errors.Is(err, version.ErrUnsupportedVersion) {
-			log.WithFields("error", err).Tracef("skipping package '%s@%s'", p.Name, p.Version)
-			return nil, nil, nil
-		}
-		return nil, nil, fmt.Errorf("matcher failed to parse version pkg=%q ver=%q: %w", p.Name, p.Version, err)
 	}
 
 	var matches []match.Match
@@ -48,7 +38,7 @@ func MatchPackageByEcosystemPackageName(provider vulnerability.Provider, p pkg.P
 		search.ByEcosystem(p.Language, p.Type),
 		search.ByPackageName(packageName),
 		onlyQualifiedPackages(p),
-		onlyVulnerableVersions(verObj),
+		onlyVulnerableVersions(version.NewVersionFromPkg(p)),
 		onlyNonWithdrawnVulnerabilities(),
 	)
 	if err != nil {

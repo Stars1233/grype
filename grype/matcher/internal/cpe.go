@@ -77,10 +77,7 @@ func MatchPackageByCPEs(provider vulnerability.Provider, p pkg.Package, upstream
 		var verObj *version.Version
 		var err error
 		if searchVersion != "" {
-			verObj, err = version.NewVersion(searchVersion, format)
-			if err != nil {
-				return nil, fmt.Errorf("matcher failed to parse version pkg=%q ver=%q: %w", p.Name, p.Version, err)
-			}
+			verObj = version.NewVersion(searchVersion, format)
 		}
 
 		// find all vulnerability records in the DB for the given CPE (not including version comparisons)
@@ -133,7 +130,8 @@ func addNewMatch(matchesByFingerprint map[match.Fingerprint]match.Match, vuln vu
 			SearchedBy: match.CPEParameters{
 				Namespace: vuln.Namespace,
 				CPEs: []string{
-					searchedByCPE.Attributes.BindToFmtString(),
+					// use .String() for proper escaping
+					searchedByCPE.Attributes.String(),
 				},
 				Package: match.CPEPackageParameter{
 					Name:    p.Name,
@@ -238,7 +236,8 @@ func toMatches(matchesByFingerprint map[match.Fingerprint]match.Match) (matches 
 func cpesToString(cpes []cpe.CPE) []string {
 	var strs = make([]string, len(cpes))
 	for idx, c := range cpes {
-		strs[idx] = c.Attributes.BindToFmtString()
+		// use .String() for proper escaping
+		strs[idx] = c.Attributes.String()
 	}
 	sort.Strings(strs)
 	return strs
